@@ -1,150 +1,92 @@
 var React = require('react')
+  , Point = require('../js/Point')
+  , Pen = require('../js/Pen');
 
 var Diagram = React.createClass({
 
   getInitialState: function() {
     var data = [140, 130, 135, 135];
     var index = data.length - 1;
+    var oldData = [0, 5, 15, 17, 22, 30, 90, 105, 110, 100, 90, 110, 130, 130, 140];
     return {
       height: 400,
       width: 800,
-      oldData: [0, 5, 15, 17, 22, 30, 90, 105, 110, 100, 90, 110, 130, 130, 140],
+      oldData: oldData,
       data: data,
+      pen: {},
+      points: [],
+      intervalID: null,
       index: index
     };
   },
 
   componentDidMount: function() {
     var that = this;
+    this.setState({pen: new Pen(this.state.oldData.length)}, function() {
+      // draw old data
+      this.renderOldGraph();
+      // draw current data
+      this.renderGraph(0);
 
-    // draw old data
-    this.renderOldGraph();
+      var id = setInterval(this.update, 10);
+      this.setState({intervalID: id});
+    });
+  },
 
-    // draw current data
-    this.renderGraph(0);
+  update: function() {
+    var index = this.state.index;
+    var min = this.state.oldData[index+1] - 10;
+    var max = this.state.oldData[index+1] + 10;
+    var randomY = Math.abs(Math.floor(Math.random() * (max - min)) + min);
+    var data = this.state.data;
+    data.push(randomY);
+    this.setState({data: data, index: index + 1}, function() {
+      this.renderGraph(this.state.index);
 
-    var id = setInterval(function() {
-      var index = that.state.index;
-      var randomY = that.state.data[index] + 10;
-      var data = that.state.data;
-      data.push(randomY);
-      that.setState({data: data, index: index + 1}, function() {
-        that.renderGraph(index);
-      });
-      if (that.state.data.length === that.state.oldData.length)
-        clearInterval(id);
-    }, 1000);
-
-    //window.addEventListener('resize', function(e) {
-      //console.log(e);
-      //console.log('resize');
-      //clearInterval(id);
-      //that.setState({width: window.innerWidth - 200, height: window.innerHeight -200}, function() {
-        //that.renderOldGraph();
-        //that.renderGraph(0);
-
-        //id = setInterval(function() {
-          //var index = that.state.index;
-          //var randomY = that.state.data[index] + 10;
-          //var data = that.state.data;
-          //data.push(randomY);
-          //that.setState({data: data, index: index + 1}, function() {
-            //that.renderGraph(index);
-          //});
-          //if (that.state.data.length === that.state.oldData.length)
-            //clearInterval(id);
-        //}, 1000);
-      //});
-    //});
+      // restart with new data
+      if (this.state.data.length === this.state.oldData.length) {
+        clearInterval(this.state.intervalID);
+        var canvas = document.getElementById('canvas');
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        var oldData = this.state.data.slice(0);
+        var data = [];
+        data[0] = oldData[oldData.length - 1];
+        this.setState({
+          oldData: oldData,
+          data: data,
+          points: [],
+          index: 0
+        }, function() {
+          this.renderOldGraph();
+          this.renderGraph(0);
+          var id = setInterval(this.update, 10);
+          this.setState({intervalID: id});
+        });
+      }
+    });
   },
 
   renderOldGraph: function() {
-    var that = this;
-    var canvas = document.getElementById('canvas');
-    var ctx = canvas.getContext('2d');
-
-    var step = Math.ceil(this.state.width / (this.state.oldData.length - 1));
-
-    var getY = function(y) {
-      return that.state.height - y;
-    };
-
-    ctx.beginPath();
-    ctx.strokeStyle = '#888';
-    ctx.fillStyle = '#888';
-    ctx.moveTo(0, getY(this.state.oldData[0]));
-
-    for (var i = 1; i <= this.state.oldData.length - 1; i++) {
-      // draw line
-      ctx.lineTo(i * step, getY(this.state.oldData[i]));
-      ctx.stroke();
-      ctx.closePath();
-      
-      // draw under the line
-      ctx.beginPath();
-      ctx.globalAlpha = 0.1;
-      ctx.moveTo((i-1)*step, getY(this.state.oldData[i-1]));
-      ctx.lineTo(i*step, getY(this.state.oldData[i]));
-      ctx.lineTo(i*step, this.state.height);
-      ctx.lineTo((i-1)*step, this.state.height);
-      ctx.fill();
-      ctx.closePath();
-      
-      // prepare for next round
-      ctx.globalAlpha = 1;
-      ctx.beginPath();
-      ctx.moveTo(i*step, getY(this.state.oldData[i]));
+    var points = [];
+    for (var i = 0; i <= this.state.oldData.length - 1; i++) {
+      points[i] = new Point(i, this.state.oldData[i]);
+      if (i !== 0) {
+        this.state.pen.drawLine(points[i-1], points[i], 'old');
+        this.state.pen.drawIntegral(points[i-1], points[i], 'old');
+      }
     }
   },
 
   renderGraph: function(index) {
-    var that = this;
-    var canvas = document.getElementById('canvas');
-    var ctx = canvas.getContext('2d');
-
-    var step = Math.ceil(this.state.width / (this.state.oldData.length - 1));
-
-    var getY = function(y) {
-      return that.state.height - y;
-    };
-
-    ctx.beginPath();
-    ctx.moveTo(index * step, getY(this.state.data[index]));
-
-    for (var i = index + 1; i <= this.state.data.length - 1; i++) {
-
-      if (this.state.data[i-1] < this.state.data[i]) {
-        ctx.strokeStyle = '#22dd22';
-        ctx.fillStyle = '#22dd22';
-      } else if (this.state.data[i-1] === this.state.data[i]) {
-        ctx.strokeStyle = '#dddd22';
-        ctx.fillStyle = '#dddd22';
-      } else {
-        ctx.strokeStyle = '#dd2222';
-        ctx.fillStyle = '#dd2222';
+    var points = this.state.points;
+    for (var i = index; i <= this.state.data.length - 1; i++) {
+      points[i] = new Point(i, this.state.data[i]);
+      if (i !== 0) {
+        this.state.pen.drawLine(points[i-1], points[i], 'new');
+        this.state.pen.drawIntegral(points[i-1], points[i], 'new');
       }
-
-      // draw line
-      ctx.lineTo(i * step, getY(this.state.data[i]));
-      ctx.stroke();
-      ctx.closePath();
-      
-      // draw under the line
-      ctx.beginPath();
-      ctx.globalAlpha = 0.1;
-      ctx.moveTo((i-1) * step, getY(this.state.data[i-1]));
-      ctx.lineTo(i * step, getY(this.state.data[i]));
-      ctx.lineTo(i * step, this.state.height);
-      ctx.lineTo((i-1) * step, this.state.height);
-      ctx.fill();
-      ctx.closePath();
-      
-      // prepare for next round
-      ctx.globalAlpha = 1;
-      ctx.beginPath();
-      ctx.moveTo(i * step, getY(this.state.data[i]));
     }
-
+    this.setState({points: points});
   },
 
   render: function() {
