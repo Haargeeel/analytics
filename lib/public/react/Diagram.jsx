@@ -8,7 +8,7 @@ var Diagram = React.createClass({
     var data = [140, 130, 135, 135];
     var index = data.length - 1;
     var oldData = [0, 5, 15, 17, 22, 30, 90, 105, 110, 100, 90, 110, 130, 130, 140];
-    var fps = 60;
+    var fps = 25;
     var ms = 1000 / fps;
     return {
       height: 400,
@@ -22,22 +22,38 @@ var Diagram = React.createClass({
       ms: ms,
       rate: 10,
       n: 0,
+      step: 0,
+      mouseCoord: null,
+      mousePos: [],
       index: index
     };
   },
 
   componentDidMount: function() {
     var that = this;
-    this.setState({pen: new Pen(this.state.oldData.length)}, function() {
-      // draw old data
-      this.renderOldGraph();
-      // draw current data
-      this.renderGraph(0);
+    var canvas = document.getElementById('canvas');
+    this.setState({
+      step: Math.ceil(canvas.width / (this.state.oldData.length - 1)),
+      pen: new Pen()}, function() {
+        // draw old data
+        this.drawOldGraph();
+        // draw current data
+        this.drawGraph(0);
 
-      var id = setInterval(this.update, this.state.ms);
-      this.setState({intervalID: id});
+        var id = setInterval(this.update, this.state.ms);
+        this.setState({intervalID: id});
+    });
+    canvas.addEventListener('mousemove', function(e) {
+      console.log(e);
+      var rect = canvas.getBoundingClientRect();
+      var p = new Point(e.clientX - rect.left,
+                        e.clientY - rect.top + canvas.height);
+      that.setState({mouseCoord: p, mousePos: [e.pageX, e.pageY]});
     });
     window.addEventListener('keydown', function(e) {
+      if (e.keyCode === 83) { // s
+        clearInterval(that.state.intervalID);
+      }
       if (e.keyIdentifier === 'Up') {
         var fps = that.state.fps + 5;
         var ms = 1000 / fps;
@@ -64,6 +80,7 @@ var Diagram = React.createClass({
   },
 
   update: function() {
+    var that = this;
     var n = this.state.n + 1;
     var data = this.state.data;
     var index = this.state.index;
@@ -78,8 +95,11 @@ var Diagram = React.createClass({
     this.setState({data: data, index: index, n: n}, function() {
       var canvas = document.getElementById('canvas');
       canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-      this.renderOldGraph();
-      this.renderGraph();
+      this.drawOldGraph();
+      this.drawGraph();
+      if (this.state.mouseCoord) {
+        this.drawCircle();
+      }
 
       // restart with new data
       if (this.state.data.length === this.state.oldData.length) {
@@ -93,8 +113,8 @@ var Diagram = React.createClass({
           points: [],
           index: 0
         }, function() {
-          this.renderOldGraph();
-          this.renderGraph();
+          this.drawOldGraph();
+          this.drawGraph();
           var id = setInterval(this.update, this.state.ms);
           this.setState({intervalID: id});
         });
@@ -102,10 +122,10 @@ var Diagram = React.createClass({
     });
   },
 
-  renderOldGraph: function() {
+  drawOldGraph: function() {
     var points = [];
     for (var i = 0; i <= this.state.oldData.length - 1; i++) {
-      points[i] = new Point(i, this.state.oldData[i]);
+      points[i] = new Point(i * this.state.step, this.state.oldData[i]);
       if (i !== 0) {
         this.state.pen.drawLine(points[i-1], points[i], 'old');
         this.state.pen.drawIntegral(points[i-1], points[i], 'old');
@@ -113,10 +133,10 @@ var Diagram = React.createClass({
     }
   },
 
-  renderGraph: function() {
+  drawGraph: function() {
     var points = this.state.points;
     for (var i = 0; i <= this.state.data.length - 1; i++) {
-      points[i] = new Point(i, this.state.data[i]);
+      points[i] = new Point(i * this.state.step, this.state.data[i]);
       if (i !== 0) {
         this.state.pen.drawLine(points[i-1], points[i], 'new');
         this.state.pen.drawIntegral(points[i-1], points[i], 'new');
@@ -125,12 +145,39 @@ var Diagram = React.createClass({
     this.setState({points: points});
   },
 
+  drawCircle: function() {
+    var that = this;
+    var showHint = false;
+    this.state.points.forEach(function(point) {
+      if ((that.state.mouseCoord.x < point.x + 5 &&
+          that.state.mouseCoord.x > point.x - 5) &&
+          (that.state.mouseCoord.y < point.y + 5 &&
+           that.state.mouseCoord.y > point.y - 5)) {
+        that.state.pen.drawCircle(point);
+        showHint = true;
+      }
+    });
+    this.setState({showHint: showHint});
+  },
+
+  renderHint: function() {
+    if (this.state.showHint) {
+      var style = {left: this.state.mousePos[0] - 20,
+                   top: this.state.mousePos[1] - 30};
+      return (
+        <div className='hint' style={style}>
+        </div>
+      );
+    }
+  },
+
   render: function() {
     return (
       <div className='diagram'>
         <canvas id='canvas'
                 width={this.state.width+'px'}
                 height={this.state.height+'px'} />
+        { this.renderHint() }
       </div> 
     );
   }
